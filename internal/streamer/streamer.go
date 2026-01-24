@@ -11,7 +11,7 @@ import (
 )
 
 // StreamVideo starts the ffmpeg process to stream the content
-func StreamVideo(ctx context.Context, videoURL, audioURL, vCodec, aCodec string, w io.Writer) error {
+func StreamVideo(ctx context.Context, videoURL string, videoHeaders map[string]string, audioURL string, audioHeaders map[string]string, vCodec, aCodec string, w io.Writer) error {
 	args := []string{
 		"-hide_banner",
 		"-loglevel", "error",
@@ -19,11 +19,13 @@ func StreamVideo(ctx context.Context, videoURL, audioURL, vCodec, aCodec string,
 
 	// Add inputs
 	// Input 0: Video
+	args = append(args, argsFromHeaders(videoHeaders)...)
 	args = append(args, "-i", videoURL)
 
 	hasSeparateAudio := audioURL != "" && audioURL != videoURL
 	if hasSeparateAudio {
 		// Input 1: Audio
+		args = append(args, argsFromHeaders(audioHeaders)...)
 		args = append(args, "-i", audioURL)
 	}
 
@@ -76,4 +78,22 @@ func StreamVideo(ctx context.Context, videoURL, audioURL, vCodec, aCodec string,
 	}
 
 	return nil
+}
+
+func argsFromHeaders(headers map[string]string) []string {
+	var args []string
+	var headerList []string
+	for k, v := range headers {
+		if strings.EqualFold(k, "User-Agent") {
+			args = append(args, "-user_agent", v)
+		} else {
+			headerList = append(headerList, fmt.Sprintf("%s: %s", k, v))
+		}
+	}
+	if len(headerList) > 0 {
+		// CRLF separated
+		headerStr := strings.Join(headerList, "\r\n") + "\r\n"
+		args = append(args, "-headers", headerStr)
+	}
+	return args
 }
