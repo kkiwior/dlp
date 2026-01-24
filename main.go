@@ -89,7 +89,12 @@ func videoHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Stream
 	// Note: If audio is nil, audioUrl is empty string, handling inside streamer
-	err = streamer.StreamVideo(ctx, video.URL, audioUrl, video.VCodec, audioCodec, w)
+	var audioHeaders map[string]string
+	if audio != nil {
+		audioHeaders = audio.HTTPHeaders
+	}
+
+	err = streamer.StreamVideo(ctx, video.URL, video.HTTPHeaders, audioUrl, audioHeaders, video.VCodec, audioCodec, w)
 	if err != nil {
 		// If we already wrote headers (likely), this error will just log to server console
 		// and client will see a truncated stream.

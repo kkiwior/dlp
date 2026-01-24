@@ -47,20 +47,22 @@ var ErrVideoNotFound = errors.New("video not found")
 
 // Format represents a single stream format
 type Format struct {
-	FormatID string  `json:"format_id"`
-	URL      string  `json:"url"`
-	VCodec   string  `json:"vcodec"`
-	ACodec   string  `json:"acodec"`
-	Width    int     `json:"width,omitempty"`
-	Height   int     `json:"height,omitempty"`
-	TBR      float64 `json:"tbr,omitempty"` // Total bitrate
+	FormatID    string            `json:"format_id"`
+	URL         string            `json:"url"`
+	VCodec      string            `json:"vcodec"`
+	ACodec      string            `json:"acodec"`
+	Width       int               `json:"width,omitempty"`
+	Height      int               `json:"height,omitempty"`
+	TBR         float64           `json:"tbr,omitempty"` // Total bitrate
+	HTTPHeaders map[string]string `json:"http_headers"`
 }
 
 // Info represents the video metadata
 type Info struct {
-	ID      string   `json:"id"`
-	Title   string   `json:"title"`
-	Formats []Format `json:"formats"`
+	ID          string            `json:"id"`
+	Title       string            `json:"title"`
+	Formats     []Format          `json:"formats"`
+	HTTPHeaders map[string]string `json:"http_headers"`
 }
 
 // Quality enum
