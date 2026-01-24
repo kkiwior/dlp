@@ -54,6 +54,8 @@ type Format struct {
 	Width       int               `json:"width,omitempty"`
 	Height      int               `json:"height,omitempty"`
 	TBR         float64           `json:"tbr,omitempty"` // Total bitrate
+	ABR         float64           `json:"abr,omitempty"` // Audio bitrate
+	Protocol    string            `json:"protocol,omitempty"`
 	HTTPHeaders map[string]string `json:"http_headers"`
 }
 
@@ -148,9 +150,39 @@ func SelectFormats(info *Info, quality Quality) (video *Format, audio *Format) {
 		return videos[i].TBR > videos[j].TBR
 	})
 
-	// Sort audios by bitrate descending
+	// Sort audios by quality
 	sort.Slice(audios, func(i, j int) bool {
-		return audios[i].TBR > audios[j].TBR
+		// 1. Prefer Audio Only (VCodec == "none")
+		iAudioOnly := audios[i].VCodec == "none"
+		jAudioOnly := audios[j].VCodec == "none"
+		if iAudioOnly && !jAudioOnly {
+			return true
+		}
+		if !iAudioOnly && jAudioOnly {
+			return false
+		}
+
+		// 2. Prefer HTTPS over m3u8 (HLS)
+		// m3u8 streams often require complex header handling or cookie propagation for segments which can fail.
+		iHttps := strings.HasPrefix(audios[i].Protocol, "http") && !strings.Contains(audios[i].Protocol, "m3u8")
+		jHttps := strings.HasPrefix(audios[j].Protocol, "http") && !strings.Contains(audios[j].Protocol, "m3u8")
+		if iHttps && !jHttps {
+			return true
+		}
+		if !iHttps && jHttps {
+			return false
+		}
+
+		// 3. Prefer Higher ABR (or TBR if ABR missing)
+		iRate := audios[i].ABR
+		if iRate == 0 {
+			iRate = audios[i].TBR
+		}
+		jRate := audios[j].ABR
+		if jRate == 0 {
+			jRate = audios[j].TBR
+		}
+		return iRate > jRate
 	})
 
 	// Select Video

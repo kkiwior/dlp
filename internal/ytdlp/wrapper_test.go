@@ -83,3 +83,33 @@ func TestSelectFormats(t *testing.T) {
 		t.Errorf("H264 Preference: Expected video 2 (1080p H264), got %s", v.FormatID)
 	}
 }
+
+func TestSelectFormats_AudioPreference(t *testing.T) {
+	formats := []Format{
+		// Mixed format: Video + Audio, HLS protocol, High TBR (e.g. 572k)
+		{
+			FormatID: "94",
+			VCodec:   "avc1.4D401E",
+			ACodec:   "mp4a.40.2",
+			Width:    634, Height: 480,
+			TBR:      572, ABR: 128,
+			Protocol: "m3u8",
+		},
+		// Audio only format: HTTPS, Lower TBR (e.g. 129k)
+		{
+			FormatID: "140",
+			VCodec:   "none",
+			ACodec:   "mp4a.40.2",
+			TBR:      129, ABR: 129,
+			Protocol: "https",
+		},
+	}
+	info := &Info{Formats: formats}
+
+	// We expect SelectFormats to pick format 140 for audio because it is audio-only and HTTPS,
+	// even though format 94 has higher TBR (Total Bitrate).
+	_, audio := SelectFormats(info, QualityHigh)
+	if audio.FormatID != "140" {
+		t.Errorf("Expected audio format 140 (Audio Only, HTTPS), got %s (Protocol: %s, VCodec: %s)", audio.FormatID, audio.Protocol, audio.VCodec)
+	}
+}
