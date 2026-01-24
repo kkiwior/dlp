@@ -49,8 +49,10 @@ func StreamVideo(ctx context.Context, videoURL string, videoHeaders map[string]s
 	} else {
 		// Transcode to H264
 		// -preset superfast to be efficient but decent size.
-		// -tune zerolatency for streaming.
-		args = append(args, "-c:v", "libx264", "-preset", "superfast", "-tune", "zerolatency")
+		// We remove zerolatency to allow better buffering/throughput.
+		// We add -g 60 to force keyframes every ~2s (assuming 30fps) for frequent fragmentation.
+		// -sc_threshold 0 ensures strict GOP adherence.
+		args = append(args, "-c:v", "libx264", "-preset", "superfast", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0")
 	}
 
 	// Audio Codec settings
