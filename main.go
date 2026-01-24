@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -52,6 +53,10 @@ func videoHandler(w http.ResponseWriter, r *http.Request) {
 	// Get Video Info
 	info, err := ytdlp.GetVideoInfo(ctx, url)
 	if err != nil {
+		if errors.Is(err, ytdlp.ErrVideoNotFound) {
+			http.Error(w, "Video not found", http.StatusNotFound)
+			return
+		}
 		log.Printf("Error getting video info: %v", err)
 		http.Error(w, "Failed to fetch video metadata", http.StatusInternalServerError)
 		return

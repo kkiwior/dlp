@@ -3,6 +3,7 @@ package ytdlp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
@@ -42,6 +43,7 @@ func init() {
 		}
 	}()
 }
+var ErrVideoNotFound = errors.New("video not found")
 
 // Format represents a single stream format
 type Format struct {
@@ -85,6 +87,13 @@ func GetVideoInfo(ctx context.Context, videoURL string) (*Info, error) {
 	cmd := exec.CommandContext(ctx, "yt-dlp", "-J", "--no-playlist", videoURL)
 	output, err := cmd.Output()
 	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			stderr := string(exitErr.Stderr)
+			if strings.Contains(stderr, "Video unavailable") || strings.Contains(stderr, "HTTP Error 404") {
+				return nil, ErrVideoNotFound
+			}
+		}
 		return nil, fmt.Errorf("failed to run yt-dlp: %w", err)
 	}
 
