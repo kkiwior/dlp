@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -114,8 +114,8 @@ func GetVideoInfo(ctx context.Context, videoURL string) (*Info, error) {
 // SelectFormats chooses the best video and audio formats based on quality
 func SelectFormats(info *Info, quality Quality) (video *Format, audio *Format) {
 	// Filter video and audio formats
-	var videos []Format
-	var audios []Format
+	videos := make([]Format, 0, len(info.Formats))
+	audios := make([]Format, 0, len(info.Formats))
 
 	for _, f := range info.Formats {
 		isVideo := f.VCodec != "none" && f.Width > 0
@@ -132,57 +132,57 @@ func SelectFormats(info *Info, quality Quality) (video *Format, audio *Format) {
 	}
 
 	// Sort videos by bitrate (quality) descending
-	sort.Slice(videos, func(i, j int) bool {
+	slices.SortFunc(videos, func(a, b Format) int {
 		// If resolution is different, prefer higher resolution
-		if videos[i].Height != videos[j].Height {
-			return videos[i].Height > videos[j].Height
+		if a.Height != b.Height {
+			return b.Height - a.Height
 		}
 		// If resolution is same, prefer H264 (avc1) to avoid transcoding
-		iH264 := strings.HasPrefix(videos[i].VCodec, "avc1")
-		jH264 := strings.HasPrefix(videos[j].VCodec, "avc1")
-		if iH264 && !jH264 {
-			return true
-		}
-		if !iH264 && jH264 {
-			return false
+		aH264 := strings.HasPrefix(a.VCodec, "avc1")
+		bH264 := strings.HasPrefix(b.VCodec, "avc1")
+		if aH264 != bH264 {
+			if aH264 {
+				return -1
+			}
+			return 1
 		}
 		// Otherwise bitrate
-		return videos[i].TBR > videos[j].TBR
+		return int(b.TBR - a.TBR)
 	})
 
 	// Sort audios by quality
-	sort.Slice(audios, func(i, j int) bool {
+	slices.SortFunc(audios, func(a, b Format) int {
 		// 1. Prefer Audio Only (VCodec == "none")
-		iAudioOnly := audios[i].VCodec == "none"
-		jAudioOnly := audios[j].VCodec == "none"
-		if iAudioOnly && !jAudioOnly {
-			return true
-		}
-		if !iAudioOnly && jAudioOnly {
-			return false
+		aAudioOnly := a.VCodec == "none"
+		bAudioOnly := b.VCodec == "none"
+		if aAudioOnly != bAudioOnly {
+			if aAudioOnly {
+				return -1
+			}
+			return 1
 		}
 
 		// 2. Prefer HTTPS over m3u8 (HLS)
 		// m3u8 streams often require complex header handling or cookie propagation for segments which can fail.
-		iHttps := strings.HasPrefix(audios[i].Protocol, "http") && !strings.Contains(audios[i].Protocol, "m3u8")
-		jHttps := strings.HasPrefix(audios[j].Protocol, "http") && !strings.Contains(audios[j].Protocol, "m3u8")
-		if iHttps && !jHttps {
-			return true
-		}
-		if !iHttps && jHttps {
-			return false
+		aHttps := strings.HasPrefix(a.Protocol, "http") && !strings.Contains(a.Protocol, "m3u8")
+		bHttps := strings.HasPrefix(b.Protocol, "http") && !strings.Contains(b.Protocol, "m3u8")
+		if aHttps != bHttps {
+			if aHttps {
+				return -1
+			}
+			return 1
 		}
 
 		// 3. Prefer Higher ABR (or TBR if ABR missing)
-		iRate := audios[i].ABR
-		if iRate == 0 {
-			iRate = audios[i].TBR
+		aRate := a.ABR
+		if aRate == 0 {
+			aRate = a.TBR
 		}
-		jRate := audios[j].ABR
-		if jRate == 0 {
-			jRate = audios[j].TBR
+		bRate := b.ABR
+		if bRate == 0 {
+			bRate = b.TBR
 		}
-		return iRate > jRate
+		return int(bRate - aRate)
 	})
 
 	// Select Video
