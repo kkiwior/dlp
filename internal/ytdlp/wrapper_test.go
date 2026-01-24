@@ -1,8 +1,35 @@
 package ytdlp
 
 import (
+	"context"
 	"testing"
+	"time"
 )
+
+func TestGetVideoInfo_CacheHit(t *testing.T) {
+	// Pre-populate cache
+	dummyURL := "http://dummy-url.com"
+	dummyInfo := &Info{
+		ID:    "dummy",
+		Title: "Dummy Video",
+	}
+	infoCache.Store(dummyURL, cachedInfo{
+		info:      dummyInfo,
+		timestamp: time.Now(),
+	})
+
+	// Call GetVideoInfo
+	// If it tries to run yt-dlp, it will fail (yt-dlp not found or error on dummy URL)
+	// But since it's cached, it should return dummyInfo immediately.
+	info, err := GetVideoInfo(context.Background(), dummyURL)
+	if err != nil {
+		t.Fatalf("GetVideoInfo failed: %v", err)
+	}
+
+	if info.ID != dummyInfo.ID {
+		t.Errorf("Expected info ID %s, got %s", dummyInfo.ID, info.ID)
+	}
+}
 
 func TestSelectFormats(t *testing.T) {
 	formats := []Format{
