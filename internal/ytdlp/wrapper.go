@@ -4,10 +4,44 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os/exec"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 )
+
+var (
+	infoCache sync.Map
+)
+
+type cachedInfo struct {
+	info      *Info
+	timestamp time.Time
+}
+
+const cacheTTL = 10 * time.Minute
+
+func init() {
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			infoCache.Range(func(key, value interface{}) bool {
+				entry, ok := value.(cachedInfo)
+				if !ok {
+					infoCache.Delete(key)
+					return true
+				}
+				if time.Since(entry.timestamp) > cacheTTL {
+					infoCache.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
+}
 
 // Format represents a single stream format
 type Format struct {
@@ -38,7 +72,17 @@ const (
 
 // GetVideoInfo fetches metadata for the given URL
 func GetVideoInfo(ctx context.Context, videoURL string) (*Info, error) {
-	cmd := exec.CommandContext(ctx, "yt-dlp", "-J", videoURL)
+	if val, ok := infoCache.Load(videoURL); ok {
+		entry, ok := val.(cachedInfo)
+		if ok && time.Since(entry.timestamp) < cacheTTL {
+			log.Printf("Cache HIT for URL: %s", videoURL)
+			return entry.info, nil
+		}
+		infoCache.Delete(videoURL)
+	}
+	log.Printf("Cache MISS for URL: %s", videoURL)
+
+	cmd := exec.CommandContext(ctx, "yt-dlp", "-J", "--no-playlist", videoURL)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to run yt-dlp: %w", err)
@@ -48,6 +92,8 @@ func GetVideoInfo(ctx context.Context, videoURL string) (*Info, error) {
 	if err := json.Unmarshal(output, &info); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
+
+	infoCache.Store(videoURL, cachedInfo{info: &info, timestamp: time.Now()})
 
 	return &info, nil
 }
