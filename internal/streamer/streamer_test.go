@@ -26,6 +26,13 @@ func TestBuildFfmpegArgs(t *testing.T) {
 			wantThreads: true,
 			wantCopy:    true,
 		},
+		{
+			name:        "No transcoding needed (H265)",
+			vCodec:      "hvc1",
+			wantPreset:  "",
+			wantThreads: true,
+			wantCopy:    true,
+		},
 	}
 
 	for _, tt := range tests {
