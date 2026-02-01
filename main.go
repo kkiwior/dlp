@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 	"video-microservice/internal/streamer"
 	"video-microservice/internal/ytdlp"
 )
@@ -49,9 +50,11 @@ func videoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Processing request for URL: %s, Quality: %s", url, quality)
+	startTime := time.Now()
 
 	// Get Video Info
 	info, err := ytdlp.GetVideoInfo(ctx, url)
+	log.Printf("yt-dlp info fetch took: %v", time.Since(startTime))
 	if err != nil {
 		if errors.Is(err, ytdlp.ErrVideoNotFound) {
 			http.Error(w, "Video not found", http.StatusNotFound)
@@ -102,5 +105,5 @@ func videoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println("Streaming completed successfully")
+	log.Printf("Streaming completed successfully. Total request time: %v", time.Since(startTime))
 }
