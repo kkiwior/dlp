@@ -8,7 +8,22 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
+
+type monitoringWriter struct {
+	w     io.Writer
+	start time.Time
+	first bool
+}
+
+func (mw *monitoringWriter) Write(p []byte) (n int, err error) {
+	if !mw.first {
+		mw.first = true
+		log.Printf("Streamer: First byte sent to client after %v", time.Since(mw.start))
+	}
+	return mw.w.Write(p)
+}
 
 // StreamVideo starts the ffmpeg process to stream the content
 func StreamVideo(ctx context.Context, videoURL string, videoHeaders map[string]string, audioURL string, audioHeaders map[string]string, vCodec, aCodec string, w io.Writer) error {
@@ -16,15 +31,47 @@ func StreamVideo(ctx context.Context, videoURL string, videoHeaders map[string]s
 
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 
-	// Bind stdout to the writer (HTTP response)
-	cmd.Stdout = w
+	// Wrap writer to monitor TTFB
+	mw := &monitoringWriter{w: w, start: time.Now()}
+	cmd.Stdout = mw
 
-	// Bind stderr to OS stderr so we can see logs in container
-	cmd.Stderr = os.Stderr
+	// Pipe stderr to capture progress
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to pipe stderr: %w", err)
+	}
 
 	log.Printf("Starting ffmpeg with args: %v", args)
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("ffmpeg start failed: %w", err)
+	}
+
+	// Read stderr in a goroutine
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			n, err := stderrPipe.Read(buf)
+			if n > 0 {
+				chunk := buf[:n]
+				os.Stderr.Write(chunk) // Pass through to original stderr
+
+				// Simple heuristic: if we see "speed=", log it as a distinct log line for visibility
+				s := string(chunk)
+				if strings.Contains(s, "speed=") {
+					// Extract the line or just log the chunk.
+					// Since chunk might be partial, this isn't perfect, but good enough for debug.
+					// We'll log it if it looks like a stats line.
+					log.Printf("FFMPEG PROGRESS: %s", strings.TrimSpace(s))
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("ffmpeg execution failed: %w", err)
 	}
 
@@ -34,7 +81,7 @@ func StreamVideo(ctx context.Context, videoURL string, videoHeaders map[string]s
 func buildFfmpegArgs(videoURL string, videoHeaders map[string]string, audioURL string, audioHeaders map[string]string, vCodec, aCodec string) []string {
 	args := []string{
 		"-hide_banner",
-		"-loglevel", "error",
+		"-loglevel", "info",
 		"-threads", "0",
 	}
 
