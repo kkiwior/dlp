@@ -12,9 +12,30 @@ import (
 
 // StreamVideo starts the ffmpeg process to stream the content
 func StreamVideo(ctx context.Context, videoURL string, videoHeaders map[string]string, audioURL string, audioHeaders map[string]string, vCodec, aCodec string, w io.Writer) error {
+	args := buildFfmpegArgs(videoURL, videoHeaders, audioURL, audioHeaders, vCodec, aCodec)
+
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+
+	// Bind stdout to the writer (HTTP response)
+	cmd.Stdout = w
+
+	// Bind stderr to OS stderr so we can see logs in container
+	cmd.Stderr = os.Stderr
+
+	log.Printf("Starting ffmpeg with args: %v", args)
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg execution failed: %w", err)
+	}
+
+	return nil
+}
+
+func buildFfmpegArgs(videoURL string, videoHeaders map[string]string, audioURL string, audioHeaders map[string]string, vCodec, aCodec string) []string {
 	args := []string{
 		"-hide_banner",
 		"-loglevel", "error",
+		"-threads", "0",
 	}
 
 	// Add inputs
@@ -48,11 +69,11 @@ func StreamVideo(ctx context.Context, videoURL string, videoHeaders map[string]s
 		args = append(args, "-c:v", "copy")
 	} else {
 		// Transcode to H264
-		// -preset superfast to be efficient but decent size.
+		// -preset ultrafast to be efficient but decent size.
 		// We remove zerolatency to allow better buffering/throughput.
 		// We add -g 60 to force keyframes every ~2s (assuming 30fps) for frequent fragmentation.
 		// -sc_threshold 0 ensures strict GOP adherence.
-		args = append(args, "-c:v", "libx264", "-preset", "superfast", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0")
+		args = append(args, "-c:v", "libx264", "-preset", "ultrafast", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0")
 	}
 
 	// Audio Codec settings
@@ -65,21 +86,7 @@ func StreamVideo(ctx context.Context, videoURL string, videoHeaders map[string]s
 	// Output format settings for streaming MP4
 	args = append(args, "-f", "mp4", "-movflags", "frag_keyframe+empty_moov", "pipe:1")
 
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
-
-	// Bind stdout to the writer (HTTP response)
-	cmd.Stdout = w
-
-	// Bind stderr to OS stderr so we can see logs in container
-	cmd.Stderr = os.Stderr
-
-	log.Printf("Starting ffmpeg with args: %v", args)
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg execution failed: %w", err)
-	}
-
-	return nil
+	return args
 }
 
 func argsFromHeaders(headers map[string]string) []string {
