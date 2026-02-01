@@ -113,3 +113,41 @@ func TestSelectFormats_AudioPreference(t *testing.T) {
 		t.Errorf("Expected audio format 140 (Audio Only, HTTPS), got %s (Protocol: %s, VCodec: %s)", audio.FormatID, audio.Protocol, audio.VCodec)
 	}
 }
+
+func TestSelectFormats_CopyFriendlyPreference(t *testing.T) {
+	// Tests that we prefer codecs that allow direct copy (h264, hevc, etc) over others (vp9, av1)
+	// even if they don't have standard "avc1" prefix, and even if other codec has higher bitrate.
+
+	formats := []Format{
+		{FormatID: "vp9-high", VCodec: "vp9", Width: 1920, Height: 1080, TBR: 5000},
+		{FormatID: "h264-no-prefix", VCodec: "h264", Width: 1920, Height: 1080, TBR: 4000},
+		{FormatID: "hevc", VCodec: "hev1.1.6.L93.B0", Width: 1920, Height: 1080, TBR: 4500},
+	}
+	info := &Info{Formats: formats}
+
+	// Should prefer HEVC (4500) over H264 (4000) because both are copy-friendly, so bitrate decides?
+	// Wait, currently SelectFormats logic:
+	// If both are copy friendly -> fall through to bitrate.
+	// So HEVC > H264 > VP9.
+	// But VP9 is 5000.
+	// CopyFriendly vs Non-CopyFriendly -> CopyFriendly wins.
+	// So HEVC or H264 should win over VP9.
+	// Between HEVC and H264 -> Bitrate wins.
+
+	v, _ := SelectFormats(info, QualityHigh)
+	if v.FormatID != "hevc" {
+		t.Errorf("Expected hevc (Copy Friendly + High Bitrate among copy friendly), got %s", v.FormatID)
+	}
+
+	// Test 2: Only H264 (no prefix) and VP9
+	formats2 := []Format{
+		{FormatID: "vp9-high", VCodec: "vp9", Width: 1920, Height: 1080, TBR: 5000},
+		{FormatID: "h264-no-prefix", VCodec: "h264", Width: 1920, Height: 1080, TBR: 4000},
+	}
+	info2 := &Info{Formats: formats2}
+
+	v2, _ := SelectFormats(info2, QualityHigh)
+	if v2.FormatID != "h264-no-prefix" {
+		t.Errorf("Expected h264-no-prefix over VP9, got %s", v2.FormatID)
+	}
+}

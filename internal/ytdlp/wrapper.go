@@ -137,11 +137,11 @@ func SelectFormats(info *Info, quality Quality) (video *Format, audio *Format) {
 		if a.Height != b.Height {
 			return b.Height - a.Height
 		}
-		// If resolution is same, prefer H264 (avc1) to avoid transcoding
-		aH264 := strings.HasPrefix(a.VCodec, "avc1")
-		bH264 := strings.HasPrefix(b.VCodec, "avc1")
-		if aH264 != bH264 {
-			if aH264 {
+		// If resolution is same, prefer Copy-Friendly codecs (H264, HEVC) to avoid transcoding
+		aCopy := isCopyFriendly(a.VCodec)
+		bCopy := isCopyFriendly(b.VCodec)
+		if aCopy != bCopy {
+			if aCopy {
 				return -1
 			}
 			return 1
@@ -256,4 +256,11 @@ func abs(x int) int {
 		return -x
 	}
 	return x
+}
+
+func isCopyFriendly(codec string) bool {
+	lower := strings.ToLower(codec)
+	return strings.Contains(lower, "avc1") || strings.Contains(lower, "h264") ||
+		strings.Contains(lower, "hevc") || strings.Contains(lower, "hvc1") ||
+		strings.Contains(lower, "hev1") || strings.Contains(lower, "h265")
 }
