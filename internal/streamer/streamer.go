@@ -111,8 +111,10 @@ func buildFfmpegArgs(videoURL string, videoHeaders map[string]string, audioURL s
 
 	// Video Codec settings
 	// User requirement: "output encoded in h264".
-	// If source is already h264 (avc1), we copy.
-	if strings.Contains(strings.ToLower(vCodec), "avc1") || strings.Contains(strings.ToLower(vCodec), "h264") {
+	// If source is already h264 (avc1) or h265 (hevc), we copy.
+	vCodecLower := strings.ToLower(vCodec)
+	if strings.Contains(vCodecLower, "avc1") || strings.Contains(vCodecLower, "h264") ||
+		strings.Contains(vCodecLower, "hevc") || strings.Contains(vCodecLower, "hvc1") || strings.Contains(vCodecLower, "hev1") || strings.Contains(vCodecLower, "h265") {
 		args = append(args, "-c:v", "copy")
 	} else {
 		// Transcode to H264
